@@ -1,0 +1,4 @@
+[submodule "proto/borealis-prototypes"]
+	path = proto/borealis-prototypes
+	url = https://github.com/aurora-is-near/borealis-prototypes.git
+	branch = main

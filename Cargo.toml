@@ -1,0 +1,37 @@
+[package]
+name = "blocksapi-rs"
+version = "0.1.0"
+edition = "2021"
+description = "A Rust gRPC client for streaming blockchain data"
+license = "MIT OR Apache-2.0"
+
+[lib]
+name = "blocksapi_rs"
+path = "src/lib.rs"
+
+[dependencies]
+anyhow = "1.0.79"
+ciborium = "0.2.2"
+derive_builder = "0.20.2"
+futures = "0.3"
+lz4 = "1.24.0"
+prost = "0.14.1"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tokio = { version = "1.36.0", features = [
+    "sync",
+    "time",
+    "macros",
+    "rt-multi-thread",
+] }
+tokio-stream = "0.1"
+tonic = "0.14.2"
+tonic-prost = "0.14.2"
+tracing = "0.1.40"
+
+
+near-indexer-primitives = { git = "https://github.com/kobayurii/nearcore", branch = "fork/2.8.0" }
+
+
+[build-dependencies]
+tonic-prost-build = "0.14.2"
