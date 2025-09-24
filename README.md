@@ -24,7 +24,7 @@ Experimental / early stage. Expect breaking API changes prior to `1.0.0`.
 ## Quick Start
 
 ```bash
-git clone https://github.com/your-org/blocksapi-rs.git
+git clone https://github.com/defuse-protocol/blocksapi-rs.git
 cd blocksapi-rs
 git submodule update --init --recursive
 ```
@@ -36,7 +36,7 @@ The crate is not (yet) published. Add it via a git dependency:
 
 ```toml
 [dependencies]
-blocksapi-rs = { git = "https://github.com/your-org/blocksapi-rs", tag = "v0.1.0" }
+blocksapi-rs = { git = "https://github.com/defuse-protocol/blocksapi-rs.git", tag = "v0.1.0" }
 ```
 
 Or using a local path:
