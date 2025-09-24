@@ -104,10 +104,10 @@ impl BlocksApiConfig {
     pub async fn request(&self) -> blocksapi::ReceiveBlocksRequest {
         let mut start_policy =
             blocksapi::receive_blocks_request::StartPolicy::StartOnLatestAvailable;
-        let mut start_target = None;
+        let mut start_target_block = None;
         if self.start_on.is_some() {
             start_policy = blocksapi::receive_blocks_request::StartPolicy::StartOnClosestToTarget;
-            start_target = Some(blocksapi::block_message::Id {
+            start_target_block = Some(blocksapi::block_message::Id {
                 kind: blocksapi::block_message::Kind::MsgWhole as i32,
                 height: self.start_on.unwrap(),
                 shard_id: 0, // Default shard ID
@@ -119,7 +119,7 @@ impl BlocksApiConfig {
             stream_origin: String::new(), // Empty string for default origin
             start_policy: start_policy as i32,
             stop_policy: blocksapi::receive_blocks_request::StopPolicy::StopNever as i32,
-            start_target: start_target,
+            start_target: start_target_block,
             stop_target: None,
             delivery_settings: None,
             catchup_policy: blocksapi::receive_blocks_request::CatchupPolicy::CatchupStream as i32,
