@@ -56,7 +56,6 @@ async fn handle_streamer_message(
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-
     // Get configuration from environment variables
     let server_addr =
         env::var("BLOCKS_API_SERVER_ADDR").unwrap_or_else(|_| "http://localhost:4300".to_string());
