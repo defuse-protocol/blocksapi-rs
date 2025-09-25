@@ -1,6 +1,8 @@
 #[macro_use]
 extern crate derive_builder;
 
+pub use near_indexer_primitives;
+
 use futures::StreamExt;
 use std::io::Read;
 use tokio::sync::mpsc;
