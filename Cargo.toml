@@ -35,3 +35,4 @@ near-indexer-primitives = { git = "https://github.com/kobayurii/nearcore", branc
 
 [build-dependencies]
 tonic-prost-build = "0.14.2"
+protoc-bin-vendored = "3"
