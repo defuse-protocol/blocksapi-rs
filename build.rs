@@ -3,6 +3,9 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let protoc = protoc_bin_vendored::protoc_bin_path().unwrap();
+    std::env::set_var("PROTOC", protoc);
+
     let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
 
     // Look for proto files in the submodule directory
