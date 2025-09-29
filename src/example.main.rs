@@ -64,13 +64,13 @@ async fn main() -> anyhow::Result<()> {
         .and_then(|val| val.parse::<u64>().ok());
     let api_token = env::var("BLOCKSAPI_TOKEN=").ok();
 
-    let config = blocksapi_rs::config::BlocksApiConfigBuilder::default()
+    let config = blocksapi::BlocksApiConfigBuilder::default()
         .server_addr(server_addr)
         .start_on(Some(start_block.unwrap_or(132545138)))
         .blocksapi_token(api_token)
         .build()?;
 
-    let (sender, stream) = blocksapi_rs::streamer(config);
+    let (sender, stream) = blocksapi::streamer(config);
     let speed_tracker = std::sync::Arc::new(std::sync::Mutex::new(SpeedTracker::new()));
 
     let mut handlers = tokio_stream::wrappers::ReceiverStream::new(stream)

@@ -4,16 +4,18 @@ extern crate derive_builder;
 pub use near_indexer_primitives;
 
 use futures::StreamExt;
-use std::io::Read;
 use tokio::sync::mpsc;
 
+pub mod client;
+pub use client::BlocksApiClient;
 pub mod config;
 pub use config::{BlocksApiConfig, BlocksApiConfigBuilder};
+pub mod utils;
 
 // Generated protobuf code from aurora-is-near/borealis-prototypes
 // The proto files need to be obtained from: https://github.com/aurora-is-near/borealis-prototypes
 #[allow(clippy::all)]
-pub mod blocksapi {
+pub mod borealis_blocksapi {
     // This will use the generated code from build.rs
     include!(concat!(env!("OUT_DIR"), "/borealis.blocksapi.rs"));
 }
@@ -27,119 +29,50 @@ pub mod payloads {
     }
 }
 
-pub(crate) const BLOCKSAPI_RS: &str = "blocksapi-rs";
+pub(crate) const BLOCKSAPI: &str = "blocksapi";
 
-/// Borealis envelope structure
-/// The struct uses `cbor:",toarray"` which means it's serialized as an array
-#[derive(serde::Deserialize, Debug)]
-#[allow(dead_code)]
-struct BorealisEnvelope(
-    u16,      // type_field
-    u64,      // sequential_id
-    u32,      // timestamp_s
-    u16,      // timestamp_ms
-    [u8; 16], // unique_id
-);
-
-/// Decode the Borealis payload which is prefixed with a 1-byte version
-/// Currently only version 1 is supported
-/// The payload is expected to be in the format:
-/// [1-byte version][BorealisEnvelope][actual payload bytes]
-async fn decode_borealis_payload<T>(data: &[u8]) -> anyhow::Result<T>
-where
-    T: for<'de> serde::Deserialize<'de>,
-{
-    if data.is_empty() {
-        return Err(anyhow::anyhow!("Empty data"));
-    }
-
-    let version = data[0];
-    match version {
-        1 => {
-            let mut reader = std::io::Cursor::new(&data[1..]);
-
-            // Decode the envelope first
-            let _envelope: BorealisEnvelope = ciborium::from_reader(&mut reader)?;
-
-            // Then decode the payload
-            let payload: T = ciborium::from_reader(&mut reader)?;
-            Ok(payload)
-        }
-        _ => Err(anyhow::anyhow!(
-            "Unknown version of borealis-message: {}",
-            version
-        )),
-    }
-}
-
-/// Decode the Borealis payload containing LZ4 compressed JSON data
-/// The payload is expected to be in the format:
-/// [1-byte version][BorealisEnvelope][LZ4 compressed JSON bytes]
-/// Returns the decompressed JSON bytes
-async fn decode_near_block_json(data: &[u8]) -> anyhow::Result<Vec<u8>> {
-    // First decode the borealis payload to get the LZ4 compressed data
-    let lz4_data: Vec<u8> = decode_borealis_payload(data).await?;
-    let mut buf = vec![];
-    lz4::Decoder::new(std::io::Cursor::new(lz4_data))?.read_to_end(&mut buf)?;
-    Ok(buf)
-}
-
-/// Patch the JSON to add missing fields for compatibility with near-indexer-primitives
-/// Specificaly, add "chunks": [] if missing in the block object
-/// This is needed because near-indexer-primitives expects the "chunks" field to be present
-/// even if it's empty
-async fn patch_streamer_message_json(json_data: Vec<u8>) -> anyhow::Result<serde_json::Value> {
-    let mut json_msg = serde_json::from_slice::<serde_json::Value>(&json_data)?;
-    if let Some(block) = json_msg.get_mut("block") {
-        if let Some(block_obj) = block.as_object_mut() {
-            // Add chunks field as empty array if it doesn't exist
-            block_obj
-                .entry("chunks")
-                .or_insert_with(|| serde_json::Value::Array(vec![]));
-        }
-    }
-
-    Ok(json_msg)
-}
-
-/// Convert a `blocksapi::ReceiveBlocksResponse` to `near_indexer_primitives::StreamerMessage`
-/// by decoding the payload and deserializing the JSON
-/// This function handles only the PAYLOAD_NEAR_BLOCK_V2 format for now
-async fn convert_to_streamer_message(
-    message: blocksapi::ReceiveBlocksResponse,
-) -> anyhow::Result<near_indexer_primitives::StreamerMessage> {
-    let msg = match message.response {
-        Some(blocksapi::receive_blocks_response::Response::Message(msg)) => match msg.message {
-            Some(block_msg) => block_msg,
-            None => {
-                anyhow::bail!("Received BlockMessage with no message field");
+async fn tip_final_block(
+    final_block_height: std::sync::Arc<std::sync::atomic::AtomicU64>,
+    config: BlocksApiConfig,
+) -> anyhow::Result<()> {
+    let client = config.client().await?;
+    let mut stream = client.get_stream(None).await?;
+    loop {
+        tokio::select! {
+            // Handle incoming messages
+            message = stream.next() => {
+                match message {
+                    Some(Ok(message)) => {
+                        match message.response {
+                            Some(crate::borealis_blocksapi::receive_blocks_response::Response::Message(msg)) => {
+                                match msg.message {
+                                    Some(block_msg) => {
+                                        if let Some(id) = block_msg.id {
+                                            final_block_height.store(id.height, std::sync::atomic::Ordering::SeqCst);
+                                        }
+                                    },
+                                    None => {
+                                        tracing::error!(target: BLOCKSAPI, "Received BlockMessage with no message field");
+                                        anyhow::bail!("Received BlockMessage with no message field");
+                                    }
+                                }
+                            }
+                            _ => {
+                                tracing::error!(target: BLOCKSAPI, "Received non-message response in tip_final_block");
+                                anyhow::bail!("Received message with no response field");
+                            }
+                        };
+                    }
+                    Some(Err(status)) => {
+                        tracing::error!(target: BLOCKSAPI, "Stream error: {}", status);
+                        anyhow::bail!("Stream error: {}", status);
+                    }
+                    None => {
+                        tracing::warn!(target: BLOCKSAPI, "End of stream reached");
+                        anyhow::bail!("End of stream reached");
+                    }
+                }
             }
-        },
-        _ => {
-            anyhow::bail!("Received message with no response field");
-        }
-    };
-
-    // Extract the raw payload
-    let raw_payload = if let Some(blocksapi::block_message::Payload::RawPayload(data)) = msg.payload
-    {
-        data
-    } else {
-        anyhow::bail!("Unsupported payload type or missing payload");
-    };
-
-    // Check the format - we expect PAYLOAD_NEAR_BLOCK_V4 (JSON format)
-    match blocksapi::block_message::Format::try_from(msg.format)? {
-        blocksapi::block_message::Format::PayloadNearBlockV2 => {
-            // For V2, we need to decode the borealis envelope and decompress LZ4
-            let json_data = decode_near_block_json(&raw_payload).await?;
-            let streamer_msg_json = patch_streamer_message_json(json_data).await?;
-            Ok(serde_json::from_value::<
-                near_indexer_primitives::StreamerMessage,
-            >(streamer_msg_json)?)
-        }
-        _ => {
-            anyhow::bail!("Unsupported block message format: {:?}", msg.format);
         }
     }
 }
@@ -148,21 +81,46 @@ pub async fn start(
     streamer_message_sink: mpsc::Sender<near_indexer_primitives::StreamerMessage>,
     config: BlocksApiConfig,
 ) -> anyhow::Result<()> {
-    let mut client = config.client().await?;
-    let request = config.request().await;
-    let metadata = config.metadata().await;
-    let mut req = tonic::Request::new(request);
-    *req.metadata_mut() = metadata;
+    // Spawn a task to continuously update the final block height
+    let final_block_height_atomic = std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0));
+    tokio::spawn(tip_final_block(
+        final_block_height_atomic.clone(),
+        config.clone(),
+    ));
 
-    let response: tonic::Response<tonic::Streaming<blocksapi::ReceiveBlocksResponse>> =
-        client.receive_blocks(req).await?;
-    let mut stream = response.into_inner();
+    let mut final_block_height =
+        final_block_height_atomic.load(std::sync::atomic::Ordering::SeqCst);
 
+    // Wait for the final block height to be updated if it's still 0
+    if final_block_height == 0 {
+        tracing::info!(target: BLOCKSAPI, "Waiting for final block height to be available...");
+        let mut retries = 0;
+        while final_block_height == 0 && retries < 5 {
+            tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+            final_block_height =
+                final_block_height_atomic.load(std::sync::atomic::Ordering::SeqCst);
+            retries += 1;
+        }
+
+        if final_block_height == 0 {
+            anyhow::bail!("Failed to get final block height after 5 seconds");
+        }
+
+        tracing::info!(target: BLOCKSAPI, "Final block height available: {}", final_block_height);
+    }
     // Process the message synchronously to maintain block order
     // Collect a batch of messages and process them in parallel
     // Collect messages in batches, process in parallel, and send in order
-    let mut batch: Vec<blocksapi::ReceiveBlocksResponse> = Vec::new();
-    let mut current_height: u64 = 0;
+    // Get the current final block height to start
+    let start_block_height = config.start_on.unwrap_or(final_block_height);
+    let mut is_catchup = final_block_height > start_block_height + config.batch_size as u64;
+    let mut batch_size = if is_catchup { config.batch_size } else { 1 };
+    let mut batch: Vec<borealis_blocksapi::ReceiveBlocksResponse> = Vec::new();
+    let mut current_height: u64 = start_block_height;
+    tracing::info!(target: BLOCKSAPI, "Starting stream from block {}, final_block_height: {}, initial catchup: {}, batch size: {}", start_block_height, final_block_height, is_catchup, batch_size);
+
+    let client = config.client().await?;
+    let mut stream = client.get_stream(config.start_on).await?;
 
     loop {
         tokio::select! {
@@ -175,14 +133,14 @@ pub async fn start(
                         batch.push(response);
 
                         // Process batch when it reaches the batch size
-                        if batch.len() >= config.batch_size {
+                        if batch.len() >= batch_size {
                             let batch = std::mem::take(&mut batch);
                             let mut results = Vec::with_capacity(batch.len());
 
                             // Process in parallel
                             let mut handles = Vec::new();
                             for msg in batch {
-                                let handle = tokio::spawn(convert_to_streamer_message(msg));
+                                let handle = tokio::spawn(utils::convert_to_streamer_message(msg));
                                 handles.push(handle);
                             }
 
@@ -193,10 +151,10 @@ pub async fn start(
                                         results.push(streamer_msg);
                                     },
                                     Ok(Err(e)) => {
-                                        tracing::error!(target: BLOCKSAPI_RS, "Error converting message: {}", e);
+                                        tracing::error!(target: BLOCKSAPI, "Error converting message: {}", e);
                                     },
                                     Err(e) => {
-                                        tracing::error!(target: BLOCKSAPI_RS, "Task error: {}", e);
+                                        tracing::error!(target: BLOCKSAPI, "Task error: {}", e);
                                     }
                                 }
                             }
@@ -211,7 +169,7 @@ pub async fn start(
                                 // Ensure we're not going backwards
                                 if block_height < current_height {
                                     tracing::warn!(
-                                        target: BLOCKSAPI_RS,
+                                        target: BLOCKSAPI,
                                         "Warning: Block height {} is less than current height {}",
                                         block_height,
                                         current_height
@@ -220,18 +178,26 @@ pub async fn start(
                                 current_height = block_height;
 
                                 if let Err(e) = streamer_message_sink.send(streamer_msg).await {
-                                    tracing::error!(target: BLOCKSAPI_RS, "Error sending message to sink: {}", e);
+                                    tracing::error!(target: BLOCKSAPI, "Error sending message to sink: {}", e);
                                     break;
                                 }
+                            }
+                            // Update catchup status
+                            let final_height = final_block_height_atomic.load(std::sync::atomic::Ordering::SeqCst);
+                            let checke_is_catchup = final_height > current_height + config.batch_size as u64;
+                            if is_catchup != checke_is_catchup {
+                                is_catchup = checke_is_catchup;
+                                batch_size = if is_catchup { config.batch_size } else { 1 };
+                                tracing::info!(target: BLOCKSAPI, "Catchup status changed to: {}, new batch size: {}", is_catchup, batch_size);
                             }
                         }
                     }
                     Some(Err(status)) => {
-                        tracing::error!(target: BLOCKSAPI_RS, "Stream error: {}", status);
+                        tracing::error!(target: BLOCKSAPI, "Stream error: {}", status);
                         anyhow::bail!("Stream error: {}", status);
                     }
                     None => {
-                        tracing::warn!(target: BLOCKSAPI_RS, "End of stream reached");
+                        tracing::warn!(target: BLOCKSAPI, "End of stream reached");
                         break;
                     }
                 }
