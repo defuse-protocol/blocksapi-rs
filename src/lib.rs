@@ -31,7 +31,10 @@ pub mod payloads {
 
 pub(crate) const BLOCKSAPI: &str = "blocksapi";
 
-async fn tip_final_block(
+/// Task to continuously update the final block height
+/// This runs in the background and updates the `final_block_height` atomic variable
+/// It connects to the Blocks API and listens for new blocks, updating the height accordingly
+async fn task_update_final_block_regularly(
     final_block_height: std::sync::Arc<std::sync::atomic::AtomicU64>,
     config: BlocksApiConfig,
 ) -> anyhow::Result<()> {
@@ -77,13 +80,17 @@ async fn tip_final_block(
     }
 }
 
-pub async fn start(
+/// Start streaming blocks from the Blocks API server based on the provided configuration.
+/// Blocks are sent to the provided `streamer_message_sink` channel.
+/// This function manages the streaming, including handling catch-up logic and
+/// ensuring blocks are processed in order.
+async fn start(
     streamer_message_sink: mpsc::Sender<near_indexer_primitives::StreamerMessage>,
     config: BlocksApiConfig,
 ) -> anyhow::Result<()> {
     // Spawn a task to continuously update the final block height
     let final_block_height_atomic = std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0));
-    tokio::spawn(tip_final_block(
+    tokio::spawn(task_update_final_block_regularly(
         final_block_height_atomic.clone(),
         config.clone(),
     ));
@@ -108,15 +115,20 @@ pub async fn start(
 
         tracing::info!(target: BLOCKSAPI, "Final block height available: {}", final_block_height);
     }
-    // Process the message synchronously to maintain block order
-    // Collect a batch of messages and process them in parallel
-    // Collect messages in batches, process in parallel, and send in order
-    // Get the current final block height to start
+
+    // Adjust batch size based on catch-up status
+    // If we're behind, use the configured batch size
+    // If we're caught up, process one by one to minimize latency
     let start_block_height = config.start_on.unwrap_or(final_block_height);
     let mut is_catchup = final_block_height > start_block_height + config.batch_size as u64;
     let mut batch_size = if is_catchup { config.batch_size } else { 1 };
+
+    // Process the message synchronously to maintain block order
+    // Collect a batch of messages and process them in parallel
+    // Collect messages in batches, process in parallel, and send in order
     let mut batch: Vec<borealis_blocksapi::ReceiveBlocksResponse> = Vec::new();
     let mut current_height: u64 = start_block_height;
+
     tracing::info!(target: BLOCKSAPI, "Starting stream from block {}, final_block_height: {}, initial catchup: {}, batch size: {}", start_block_height, final_block_height, is_catchup, batch_size);
 
     let client = config.client().await?;

@@ -103,7 +103,7 @@ pub async fn convert_to_streamer_message(
             anyhow::bail!("Unsupported payload type or missing payload");
         };
 
-    // Check the format - we expect PAYLOAD_NEAR_BLOCK_V4 (JSON format)
+    // Check the format - we expect PAYLOAD_NEAR_BLOCK_V2 (JSON format)
     match crate::borealis_blocksapi::block_message::Format::try_from(msg.format)? {
         crate::borealis_blocksapi::block_message::Format::PayloadNearBlockV2 => {
             // For V2, we need to decode the borealis envelope and decompress LZ4
