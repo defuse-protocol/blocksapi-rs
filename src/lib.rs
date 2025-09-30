@@ -74,7 +74,7 @@ async fn task_update_final_block_regularly(
                         anyhow::bail!("Stream error: {}", status);
                     }
                     None => {
-                        tracing::warn!(target: BLOCKSAPI, "End of stream reached");
+                        tracing::error!(target: BLOCKSAPI, "End of stream reached");
                         anyhow::bail!("End of stream reached");
                     }
                 }
@@ -110,6 +110,9 @@ async fn start(
             final_block_height =
                 final_block_height_atomic.load(std::sync::atomic::Ordering::SeqCst);
             retries += 1;
+            if final_block_height == 0 {
+                tracing::warn!(target: BLOCKSAPI, "Final block height still 0, retrying... ({}/{})", retries, MAX_ATTEMPTS);
+            }
         }
 
         if final_block_height == 0 {
@@ -119,7 +122,7 @@ async fn start(
             );
         }
 
-        tracing::info!(target: BLOCKSAPI, "Final block height available: {}", final_block_height);
+        tracing::debug!(target: BLOCKSAPI, "Final block height available: {}", final_block_height);
     }
 
     // Adjust batch size based on catch-up status
@@ -188,7 +191,7 @@ async fn start(
                                 if block_height < current_height {
                                     tracing::warn!(
                                         target: BLOCKSAPI,
-                                        "Warning: Block height {} is less than current height {}",
+                                        "Block height {} is less than current height {}",
                                         block_height,
                                         current_height
                                     );
@@ -215,7 +218,7 @@ async fn start(
                         anyhow::bail!("Stream error: {}", status);
                     }
                     None => {
-                        tracing::warn!(target: BLOCKSAPI, "End of stream reached");
+                        tracing::error!(target: BLOCKSAPI, "End of stream reached");
                         anyhow::bail!("End of stream reached");
                     }
                 }
