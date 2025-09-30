@@ -1,7 +1,6 @@
 use std::io::Read;
 
-/// Borealis envelope structure
-/// The struct uses `cbor:",toarray"` which means it's serialized as an array
+/// Borealis envelope structure (tuple struct, serialized as CBOR array)
 #[derive(serde::Deserialize, Debug)]
 #[allow(dead_code)]
 pub struct BorealisEnvelope(

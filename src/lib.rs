@@ -202,9 +202,9 @@ async fn start(
                             }
                             // Update catchup status
                             let final_height = final_block_height_atomic.load(std::sync::atomic::Ordering::SeqCst);
-                            let checke_is_catchup = final_height > current_height + config.batch_size as u64;
-                            if is_catchup != checke_is_catchup {
-                                is_catchup = checke_is_catchup;
+                            let checked_is_catchup = final_height > current_height + config.batch_size as u64;
+                            if is_catchup != checked_is_catchup {
+                                is_catchup = checked_is_catchup;
                                 batch_size = if is_catchup { config.batch_size } else { 1 };
                                 tracing::info!(target: BLOCKSAPI, "Catchup status changed to: {}, new batch size: {}", is_catchup, batch_size);
                             }
