@@ -21,7 +21,8 @@ pub struct BlocksApiConfig {
     /// The address of the Blocks API server.
     #[builder(setter(into))]
     pub server_addr: String,
-    /// The block height to start streaming from if `start_on_latest` is false.
+    /// The block height to start streaming from
+    /// If None, streaming will start from the latest block.
     #[builder(default)]
     pub start_on: Option<u64>,
     /// The name of the stream to connect to.

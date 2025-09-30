@@ -56,7 +56,7 @@ pub async fn decode_near_block_json(data: &[u8]) -> anyhow::Result<Vec<u8>> {
 }
 
 /// Patch the JSON to add missing fields for compatibility with near-indexer-primitives
-/// Specificaly, add "chunks": [] if missing in the block object
+/// Specifically, add "chunks": [] if missing in the block object
 /// This is needed because near-indexer-primitives expects the "chunks" field to be present
 /// even if it's empty
 pub async fn patch_streamer_message_json(json_data: Vec<u8>) -> anyhow::Result<serde_json::Value> {

@@ -125,7 +125,7 @@ let config = BlocksApiConfigBuilder::default()
 	.batch_size(50)
 	.build()?;
 
-let (task, mut rx) = blocksapi_rs::streamer(config);
+let (task, mut rx) = blocksapi::streamer(config);
 while let Some(msg) = rx.recv().await {
 	// Process StreamerMessage
 	do_something(&msg)?;

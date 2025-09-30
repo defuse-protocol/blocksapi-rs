@@ -62,7 +62,7 @@ async fn main() -> anyhow::Result<()> {
     let start_block = env::var("BLOCKS_API_START_BLOCK")
         .ok()
         .and_then(|val| val.parse::<u64>().ok());
-    let api_token = env::var("BLOCKSAPI_TOKEN=").ok();
+    let api_token = env::var("BLOCKSAPI_TOKEN").ok();
 
     let config = blocksapi::BlocksApiConfigBuilder::default()
         .server_addr(server_addr)

@@ -31,6 +31,9 @@ pub mod payloads {
 
 pub(crate) const BLOCKSAPI: &str = "blocksapi";
 
+const MAX_ATTEMPTS: u64 = 5;
+const RETRY_DELAY_SECS: u64 = 1;
+
 /// Task to continuously update the final block height
 /// This runs in the background and updates the `final_block_height` atomic variable
 /// It connects to the Blocks API and listens for new blocks, updating the height accordingly
@@ -102,15 +105,18 @@ async fn start(
     if final_block_height == 0 {
         tracing::info!(target: BLOCKSAPI, "Waiting for final block height to be available...");
         let mut retries = 0;
-        while final_block_height == 0 && retries < 5 {
-            tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+        while final_block_height == 0 && retries < MAX_ATTEMPTS {
+            tokio::time::sleep(tokio::time::Duration::from_secs(RETRY_DELAY_SECS)).await;
             final_block_height =
                 final_block_height_atomic.load(std::sync::atomic::Ordering::SeqCst);
             retries += 1;
         }
 
         if final_block_height == 0 {
-            anyhow::bail!("Failed to get final block height after 5 seconds");
+            anyhow::bail!(
+                "Failed to get final block height after {} seconds",
+                RETRY_DELAY_SECS * MAX_ATTEMPTS
+            );
         }
 
         tracing::info!(target: BLOCKSAPI, "Final block height available: {}", final_block_height);
@@ -132,7 +138,7 @@ async fn start(
     tracing::info!(target: BLOCKSAPI, "Starting stream from block {}, final_block_height: {}, initial catchup: {}, batch size: {}", start_block_height, final_block_height, is_catchup, batch_size);
 
     let client = config.client().await?;
-    let mut stream = client.get_stream(config.start_on).await?;
+    let mut stream = client.get_stream(Some(start_block_height)).await?;
 
     loop {
         tokio::select! {
@@ -191,7 +197,7 @@ async fn start(
 
                                 if let Err(e) = streamer_message_sink.send(streamer_msg).await {
                                     tracing::error!(target: BLOCKSAPI, "Error sending message to sink: {}", e);
-                                    break;
+                                    return Err(anyhow::anyhow!("Error sending message to sink: {}", e));
                                 }
                             }
                             // Update catchup status
@@ -210,19 +216,17 @@ async fn start(
                     }
                     None => {
                         tracing::warn!(target: BLOCKSAPI, "End of stream reached");
-                        break;
+                        anyhow::bail!("End of stream reached");
                     }
                 }
             }
         }
     }
-
-    Ok(())
 }
 
 /// Creates `mpsc::channel` and returns the `receiver` to read the stream of `StreamerMessage`
 /// ```
-/// use blocksapi_rs::BlocksApiConfigBuilder;
+/// use blocksapi::BlocksApiConfigBuilder;
 /// use tokio::sync::mpsc;
 ///
 /// async fn main() {
@@ -233,7 +237,7 @@ async fn start(
 ///        .build()
 ///        .expect("Failed to build BlocksApiConfig");
 ///
-///     let (_, stream) = blocksapi_rs::streamer(config);
+///     let (_, stream) = blocksapi::streamer(config);
 ///
 ///     while let Some(streamer_message) = stream.recv().await {
 ///         eprintln!("{:#?}", streamer_message);
