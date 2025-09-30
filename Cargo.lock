@@ -182,7 +182,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "blocksapi-rs"
+name = "blocksapi"
 version = "0.1.0"
 dependencies = [
  "anyhow",

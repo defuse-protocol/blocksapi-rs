@@ -1,10 +1,8 @@
-use crate::blocksapi;
-
 /// Configuration struct for Blocks API client
 /// NB! Consider using [`BlocksApiConfigBuilder`]
 /// Building the `BlocksApiConfig` example:
 /// ```
-/// use blocksapi_rs::BlocksApiConfigBuilder;
+/// use blocksapi::BlocksApiConfigBuilder;
 ///
 /// async fn main() {
 ///    let config = BlocksApiConfigBuilder::default()
@@ -15,7 +13,7 @@ use crate::blocksapi;
 ///        .expect("Failed to build BlocksApiConfig");
 /// }
 /// ```
-#[derive(Default, Builder)]
+#[derive(Clone, Default, Builder)]
 #[builder(pattern = "owned")]
 pub struct BlocksApiConfig {
     /// Connection parameters
@@ -23,7 +21,8 @@ pub struct BlocksApiConfig {
     /// The address of the Blocks API server.
     #[builder(setter(into))]
     pub server_addr: String,
-    /// The block height to start streaming from if `start_on_latest` is false.
+    /// The block height to start streaming from
+    /// If None, streaming will start from the latest block.
     #[builder(default)]
     pub start_on: Option<u64>,
     /// The name of the stream to connect to.
@@ -78,66 +77,7 @@ pub struct BlocksApiConfig {
 }
 
 impl BlocksApiConfig {
-    pub async fn client(
-        &self,
-    ) -> anyhow::Result<
-        blocksapi::blocks_provider_client::BlocksProviderClient<tonic::transport::Channel>,
-    > {
-        let endpoint = tonic::transport::Endpoint::from_shared(self.server_addr.clone())?
-            .tcp_keepalive(Some(std::time::Duration::from_secs(self.tcp_keepalive)))
-            .http2_keep_alive_interval(std::time::Duration::from_secs(
-                self.http2_keepalive_interval,
-            ))
-            .keep_alive_timeout(std::time::Duration::from_secs(self.keepalive_timeout))
-            .connect_timeout(std::time::Duration::from_secs(self.connect_timeout))
-            .http2_adaptive_window(self.http2_adaptive_window)
-            .initial_connection_window_size(Some(self.connection_window_size))
-            .initial_stream_window_size(Some(self.stream_window_size))
-            .concurrency_limit(self.concurrency_limit)
-            .buffer_size(self.buffer_size);
-
-        let channel = endpoint.connect().await?;
-
-        Ok(blocksapi::blocks_provider_client::BlocksProviderClient::new(channel))
-    }
-
-    pub async fn request(&self) -> blocksapi::ReceiveBlocksRequest {
-        let mut start_policy =
-            blocksapi::receive_blocks_request::StartPolicy::StartOnLatestAvailable;
-        let mut start_target_block = None;
-        if self.start_on.is_some() {
-            start_policy = blocksapi::receive_blocks_request::StartPolicy::StartOnClosestToTarget;
-            start_target_block = Some(blocksapi::block_message::Id {
-                kind: blocksapi::block_message::Kind::MsgWhole as i32,
-                height: self.start_on.unwrap(),
-                shard_id: 0, // Default shard ID
-            });
-        }
-
-        blocksapi::ReceiveBlocksRequest {
-            stream_name: self.stream_name.clone(),
-            stream_origin: String::new(), // Empty string for default origin
-            start_policy: start_policy as i32,
-            stop_policy: blocksapi::receive_blocks_request::StopPolicy::StopNever as i32,
-            start_target: start_target_block,
-            stop_target: None,
-            delivery_settings: None,
-            catchup_policy: blocksapi::receive_blocks_request::CatchupPolicy::CatchupStream as i32,
-            catchup_delivery_settings: None,
-            cached_zstd_dicts_sha3_hashes: Vec::new(), // No cached dictionaries
-        }
-    }
-
-    pub async fn metadata(&self) -> tonic::metadata::MetadataMap {
-        let mut metadata = tonic::metadata::MetadataMap::new();
-        if let Some(token) = self.blocksapi_token.clone() {
-            if !token.is_empty() {
-                let auth_header = format!("Bearer {}", token);
-                if let Ok(auth_value) = tonic::metadata::MetadataValue::try_from(auth_header) {
-                    metadata.insert("authorization", auth_value);
-                }
-            }
-        }
-        metadata
+    pub async fn client(&self) -> anyhow::Result<crate::client::BlocksApiClient> {
+        crate::client::BlocksApiClient::from_config(self).await
     }
 }

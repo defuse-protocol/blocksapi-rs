@@ -1,12 +1,12 @@
 [package]
-name = "blocksapi-rs"
+name = "blocksapi"
 version = "0.1.0"
 edition = "2021"
 description = "A Rust gRPC client for streaming blockchain data"
 license = "MIT OR Apache-2.0"
 
 [lib]
-name = "blocksapi_rs"
+name = "blocksapi"
 path = "src/lib.rs"
 
 [dependencies]
@@ -28,7 +28,6 @@ tokio-stream = "0.1"
 tonic = "0.14.2"
 tonic-prost = "0.14.2"
 tracing = "0.1.40"
-
 
 near-indexer-primitives = { git = "https://github.com/kobayurii/nearcore", branch = "fork/2.8.0" }
 
