@@ -28,7 +28,12 @@ impl BlocksApiClient {
 
         let channel = endpoint.connect().await?;
 
-        Ok(borealis_blocksapi::blocks_provider_client::BlocksProviderClient::new(channel))
+        let client = borealis_blocksapi::blocks_provider_client::BlocksProviderClient::new(channel)
+            // Set maximum message sizes to handle large blockchain messages
+            .max_decoding_message_size(config.max_message_size)
+            .max_encoding_message_size(config.max_message_size);
+
+        Ok(client)
     }
 
     async fn prepare_metadata(
