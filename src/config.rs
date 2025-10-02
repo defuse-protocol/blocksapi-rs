@@ -74,6 +74,10 @@ pub struct BlocksApiConfig {
     /// Default is 1024.
     #[builder(default = 1024)]
     pub concurrency_limit: usize,
+    /// The maximum message size for gRPC messages.
+    /// Default is 16MB to handle large blockchain messages.
+    #[builder(default = 16 * 1024 * 1024)]
+    pub max_message_size: usize,
 }
 
 impl BlocksApiConfig {
