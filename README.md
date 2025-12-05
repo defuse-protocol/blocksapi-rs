@@ -36,7 +36,7 @@ The crate is not (yet) published. Add it via a git dependency:
 
 ```toml
 [dependencies]
-blocksapi-rs = { git = "https://github.com/defuse-protocol/blocksapi-rs.git", tag = "v0.1.0" }
+blocksapi-rs = { git = "https://github.com/defuse-protocol/blocksapi-rs.git", tag = "v0.2.0" }
 ```
 
 Or using a local path:
