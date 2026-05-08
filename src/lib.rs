@@ -165,7 +165,7 @@ async fn start(
                                 handles.push(handle);
                             }
 
-                            // Collect results
+                            // Collect results — fail fast on any conversion or task error
                             for handle in handles {
                                 match handle.await {
                                     Ok(Ok(streamer_msg)) => {
@@ -173,9 +173,11 @@ async fn start(
                                     },
                                     Ok(Err(e)) => {
                                         tracing::error!(target: BLOCKSAPI, "Error converting message: {}", e);
+                                        anyhow::bail!("Error converting message: {}", e);
                                     },
                                     Err(e) => {
                                         tracing::error!(target: BLOCKSAPI, "Task error: {}", e);
+                                        anyhow::bail!("Task error: {}", e);
                                     }
                                 }
                             }
@@ -200,7 +202,7 @@ async fn start(
 
                                 if let Err(e) = streamer_message_sink.send(streamer_msg).await {
                                     tracing::error!(target: BLOCKSAPI, "Error sending message to sink: {}", e);
-                                    return Err(anyhow::anyhow!("Error sending message to sink: {}", e));
+                                    anyhow::bail!("Error sending message to sink: {}", e);
                                 }
                             }
                             // Update catchup status
