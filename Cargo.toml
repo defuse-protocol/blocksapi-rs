@@ -29,7 +29,7 @@ tonic = "0.14.2"
 tonic-prost = "0.14.2"
 tracing = "0.1.40"
 
-near-indexer-primitives = "0.34.1"
+near-indexer-primitives = "0.35.1"
 
 
 [build-dependencies]
