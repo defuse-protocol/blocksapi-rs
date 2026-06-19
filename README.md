@@ -47,7 +47,7 @@ blocksapi-rs = { path = "../blocksapi-rs" }
 ```
 
 ### Rust Version
-Pinned via `rust-toolchain` to `1.87.0`.
+Pinned via `rust-toolchain` to `1.93.0`.
 
 ---
 
