@@ -36,7 +36,7 @@ The crate is not (yet) published. Add it via a git dependency:
 
 ```toml
 [dependencies]
-blocksapi-rs = { git = "https://github.com/defuse-protocol/blocksapi-rs.git", tag = "v0.2.0" }
+blocksapi-rs = { git = "https://github.com/defuse-protocol/blocksapi-rs.git", tag = "v0.2.5" }
 ```
 
 Or using a local path:
@@ -47,7 +47,7 @@ blocksapi-rs = { path = "../blocksapi-rs" }
 ```
 
 ### Rust Version
-Pinned via `rust-toolchain` to `1.93.0`.
+Pinned via `rust-toolchain` to `1.95.0`.
 
 ---
 
