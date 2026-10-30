@@ -1,6 +1,6 @@
 [package]
 name = "blocksapi"
-version = "0.2.4"
+version = "0.2.5"
 edition = "2021"
 description = "A Rust gRPC client for streaming blockchain data"
 license = "MIT OR Apache-2.0"
@@ -29,7 +29,7 @@ tonic = "0.14.2"
 tonic-prost = "0.14.2"
 tracing = "0.1.40"
 
-near-indexer-primitives = "0.37.1"
+near-indexer-primitives = "0.38"
 
 
 [build-dependencies]
